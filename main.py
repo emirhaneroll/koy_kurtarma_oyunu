@@ -257,11 +257,10 @@ class InventoryLinkedList:
         return total
 
 class Village:
-    def __init__(self, name: str, items: List[str]):
+    def __init__(self, name: str):
         self.name = name
-        self.inventory = AVLTree()  # BST yerine AVLTree kullanıldı
+        self.inventory = AVLTree()
         self.is_liberated = False
-        self.items = items
 
     def add_item(self, item: Item):
         self.inventory.insert(item)
@@ -269,49 +268,101 @@ class Village:
     def has_item(self, item_name: str) -> bool:
         return self.inventory.search(item_name) is not None
 
+class InventoryNode:
+    def __init__(self, item):
+        self.item = item
+        self.next = None
+
 class Inventory:
     def __init__(self, max_capacity: int = 10):
         self.max_capacity = max_capacity
-        self.items = []
-        self.bst = AVLTree()  # BST yerine AVLTree kullanıldı
+        self.head = None
+        self.size = 0
+        self.bst = AVLTree()
 
     def push(self, item: Item) -> bool:
-        if len(self.items) >= self.max_capacity:
+        if self.size >= self.max_capacity:
             return False
-        self.items.append(item)
+            
+        new_node = InventoryNode(item)
+        if not self.head:
+            self.head = new_node
+        else:
+            current = self.head
+            while current.next:
+                current = current.next
+            current.next = new_node
+            
+        self.size += 1
         self.bst.insert(item)
         return True
 
-    def pop(self) -> Optional[Item]:
-        if not self.items:
+    def pop(self, item_name: str = None) -> Optional[Item]:
+        if not self.head:
             return None
-        item = self.items.pop()
+            
+        # Eğer item_name belirtilmişse, o öğeyi bul ve çıkar
+        if item_name:
+            return self.use_item(item_name)
+            
+        # item_name belirtilmemişse, son öğeyi çıkar
+        if not self.head.next:
+            item = self.head.item
+            self.head = None
+        else:
+            current = self.head
+            while current.next.next:
+                current = current.next
+            item = current.next.item
+            current.next = None
+            
+        self.size -= 1
         self.bst.delete(item.name)
         return item
 
     def use_item(self, item_name: str) -> bool:
-        # Öğeyi büyük/küçük harf duyarlılığı olmadan ara
-        found_items = [item for item in self.items if item.name.lower() == item_name.lower()]
-        if found_items:
-            # İlk bulunan öğeyi kaldır
-            item_to_remove = found_items[0]
-            self.items.remove(item_to_remove)
-            self.bst.delete(item_to_remove.name)
+        if not self.head:
+            return False
+            
+        # İlk öğeyi kontrol et
+        if self.head.item.name.lower() == item_name.lower():
+            item = self.head.item
+            self.head = self.head.next
+            self.size -= 1
+            self.bst.delete(item.name)
             return True
+            
+        # Diğer öğeleri kontrol et
+        current = self.head
+        while current.next:
+            if current.next.item.name.lower() == item_name.lower():
+                item = current.next.item
+                current.next = current.next.next
+                self.size -= 1
+                self.bst.delete(item.name)
+                return True
+            current = current.next
+            
         return False
 
     def show_inventory(self):
         print("\n=== Çanta ===")
-        if not self.items:
+        if not self.head:
             print("Çanta boş!")
         else:
             # Öğeleri grupla ve sayılarını hesapla
             item_counts = {}
-            for item in self.items:
-                if item.name.lower() in item_counts:
-                    item_counts[item.name.lower()]["count"] += 1
+            current = self.head
+            while current:
+                if current.item.name.lower() in item_counts:
+                    item_counts[current.item.name.lower()]["count"] += 1
                 else:
-                    item_counts[item.name.lower()] = {"count": 1, "power": item.power, "name": item.name}
+                    item_counts[current.item.name.lower()] = {
+                        "count": 1,
+                        "power": current.item.power,
+                        "name": current.item.name
+                    }
+                current = current.next
             
             # Her öğeyi ve sayısını göster
             for item_info in sorted(item_counts.values(), key=lambda x: x["name"]):
@@ -320,60 +371,394 @@ class Inventory:
                 else:
                     print(f"{item_info['name']} (Güç: {item_info['power']})")
 
+    def get_size(self):
+        return self.size
+
+    def get_total_power(self):
+        total = 0
+        current = self.head
+        while current:
+            total += current.item.power
+            current = current.next
+        return total
+
+    def search_item(self, item_name: str) -> Optional[Item]:
+        return self.bst.search(item_name)
+
+class VillageNode:
+    def __init__(self, village):
+        self.village = village
+        self.next = None
+
+class VillageQueue:
+    def __init__(self):
+        self.head = None
+        self.tail = None
+        self.size = 0
+
+    def enqueue(self, village: Village):
+        """Kuyruğa köy ekler"""
+        new_node = VillageNode(village)
+        if self.tail is None:
+            self.head = self.tail = new_node
+        else:
+            self.tail.next = new_node
+            self.tail = new_node
+        self.size += 1
+
+    def dequeue(self) -> Optional[Village]:
+        """Kuyruktan köy çıkarır"""
+        if self.head is None:
+            return None
+        
+        village = self.head.village
+        self.head = self.head.next
+        if self.head is None:
+            self.tail = None
+        self.size -= 1
+        return village
+
+    def peek(self) -> Optional[Village]:
+        """Kuyruğun başındaki köyü gösterir"""
+        if self.head is None:
+            return None
+        return self.head.village
+
+    def is_empty(self) -> bool:
+        """Kuyruğun boş olup olmadığını kontrol eder"""
+        return self.head is None
+
 class Game:
     def __init__(self):
-        self.villages = deque([
-            Village("Yeşilvadi", ["Kılıç", "Yiyecek", "Kalkan"]),
-            Village("Gümüşköy", ["Büyü", "Bakır", "Zırh"]),
-            Village("Altınşehir", ["Harita", "Gümüş", "Anahtar"]),
-            Village("Demirtepe", ["Balta", "Kalkan", "Meşale"]),
-            Village("Kristalköy", ["Altın", "Zırh", "Ok-Yay"]),
-            Village("Zümrütvadi", ["Yiyecek", "Anahtar", "Kılıç"]),
-            Village("Elmasşehir", ["Bakır", "Meşale", "Büyü"])
-        ])
+        # Köyleri oluştur
+        villages = [
+            Village("Yeşilvadi"),
+            Village("Gümüşköy"),
+            Village("Altınşehir"),
+            Village("Demirtepe"),
+            Village("Kristalköy"),
+            Village("Zümrütvadi"),
+            Village("Elmasşehir")
+        ]
+        
+        # Köyleri bağlı listede tut
+        self.villages = None
+        for village in villages:
+            new_node = VillageNode(village)
+            if self.villages is None:
+                self.villages = new_node
+            else:
+                current = self.villages
+                while current.next:
+                    current = current.next
+                current.next = new_node
+        
+        # Kurtarma kuyruğunu oluştur
+        self.liberation_queue = VillageQueue()
+        # Köyleri kuyruğa ekle
+        current = self.villages
+        while current:
+            self.liberation_queue.enqueue(current.village)
+            current = current.next
+        
         self.inventory = Inventory()
         self.initialize_villages()
 
-    def initialize_villages(self):
-        # 7 köyü oluştur
-        village_names = ["Yeşilvadi", "Gümüşköy", "Altınşehir", "Demirtepe", 
-                        "Kristalköy", "Zümrütvadi", "Elmasşehir"]
+    def get_current_village(self) -> Optional[Village]:
+        """Kuyruğun başındaki köyü döndürür"""
+        return self.liberation_queue.peek()
+
+    def remove_current_village(self):
+        """Kuyruğun başındaki köyü çıkarır"""
+        self.liberation_queue.dequeue()
+
+    def liberate_village(self):
+        current_village = self.get_current_village()
+        if not current_village:
+            print("Tüm köyler kurtarıldı!")
+            return
+
+        print(f"\n{current_village.name} köyünü kurtarmaya çalışıyorsunuz...")
         
-        # Tüm öğeleri tanımla
-        all_items = [
-            Item("Kılıç", 10),
-            Item("Büyü", 5),
-            Item("Harita", 2),
-            Item("Balta", 8),
-            Item("Altın", 15),
-            Item("Yiyecek", 3),
-            Item("Bakır", 4),
-            Item("Gümüş", 6),
-            Item("Kalkan", 7),
-            Item("Zırh", 12),
-            Item("Anahtar", 1),
-            Item("Meşale", 2),
-            Item("Ok-Yay", 9)
-        ]
+        # Köy sayısını hesapla
+        total_villages = 7  # Toplam köy sayısı
+        remaining_villages = self._count_villages()  # Kalan köy sayısı
+        liberated_villages = total_villages - remaining_villages  # Kurtarılan köy sayısı
         
-        # Her köy için özel öğe kombinasyonları
-        village_items = [
-            [all_items[0], all_items[5], all_items[8]],  # Yeşilvadi: Kılıç, Yiyecek, Kalkan
-            [all_items[1], all_items[6], all_items[9]],  # Gümüşköy: Büyü, Bakır, Zırh
-            [all_items[2], all_items[7], all_items[10]], # Altınşehir: Harita, Gümüş, Anahtar
-            [all_items[3], all_items[8], all_items[11]], # Demirtepe: Balta, Kalkan, Meşale
-            [all_items[4], all_items[9], all_items[12]], # Kristalköy: Altın, Zırh, Ok-Yay
-            [all_items[5], all_items[10], all_items[0]], # Zümrütvadi: Yiyecek, Anahtar, Kılıç
-            [all_items[6], all_items[11], all_items[1]]  # Elmasşehir: Bakır, Meşale, Büyü
-        ]
+        # 5. köy için özel güç puanı sistemi (4 köy kurtarıldıktan sonra)
+        if liberated_villages == 4:  # 5. köy
+            required_power = 7
+            total_power = 0
+            
+            while total_power < required_power:
+                print(f"\nKristalköy köyünü kurtarmak için içerdeki casusuna en az {required_power} güç puanı vermen gerekiyor.")
+                print(f"Şu ana kadar verilen güç puanı: {total_power}")
+                print(f"Kalan güç puanı: {required_power - total_power}")
+                
+                print("\nÇantanızdaki öğeler:")
+                current = self.inventory.head
+                i = 1
+                while current:
+                    print(f"{i}. {current.item.name} (Güç: {current.item.power})")
+                    current = current.next
+                    i += 1
+                
+                item_name = input("\nKullanmak istediğiniz öğenin adını girin: ")
+                found_item = self.inventory.search_item(item_name)
+                if found_item:
+                    if self.inventory.pop(item_name):
+                        total_power += found_item.power
+                        print(f"{found_item.name} kullanıldı. Güç puanı: {found_item.power}")
+                        print(f"Toplam güç puanı: {total_power}")
+                    else:
+                        print("Öğe kullanılamadı!")
+                else:
+                    print("Öğe bulunamadı! Lütfen listedeki öğelerden birini seçin.")
+                    continue
+            
+            print(f"\nToplam {total_power} güç puanı toplandı!")
+            print(f"{current_village.name} köyü başarıyla kurtarıldı!")
+            
+            # Köydeki öğeleri çantaya ekle
+            print("\nKöyden alınan öğeler:")
+            for item in current_village.inventory.items:
+                while True:
+                    if not self.inventory.push(item):
+                        print("\nÇanta dolu! Bir öğe çıkarmalısınız.")
+                        print("\nÇantanızdaki öğeler:")
+                        current = self.inventory.head
+                        i = 1
+                        while current:
+                            print(f"{i}. {current.item.name} (Güç: {current.item.power})")
+                            current = current.next
+                            i += 1
+                        item_to_remove = input("\nÇıkarmak istediğiniz öğenin adını girin: ")
+                        if self.inventory.pop(item_to_remove):
+                            if self.inventory.push(item):
+                                print(f"{item_to_remove} çantadan çıkarıldı ve {item.name} eklendi.")
+                                break
+                            else:
+                                print("Çanta hala dolu! Başka bir öğe çıkarmalısınız.")
+                        else:
+                            print("Öğe bulunamadı! Lütfen listedeki öğelerden birini seçin.")
+                            continue
+                    else:
+                        print(f"- {item.name} (Güç: {item.power})")
+                        break
+            
+            current_village.is_liberated = True
+            self.remove_current_village()  # Kuyruktan çıkar
+            return
+
+        # 6. köy için bulmaca sistemi (5 köy kurtarıldıktan sonra)
+        elif liberated_villages == 5:  # 6. köy
+            print("\nKöy girişindeki kapıyı açmak için bir bulmaca var!")
+            print("\nBULMACA:")
+            print("Kristalköy ve Zümrütvadi köylerindeki envanterlerin baş harflerinden oluşan 4 harfli bir kelime bulun.")
+            print("Bu kelimenin harfleri Kristalköy ve Zümrütvadi'de gizli.")
+            print("\nİpucu: Kristalköy'deki envanterler: Altın, Zırh, Ok-Yay")
+            print("İpucu: Zümrütvadi'deki envanterler: Yiyecek, Anahtar, Kılıç")
+            
+            while True:
+                answer = input("\nBulmacanın cevabını girin (büyük harflerle): ").upper()
+                if answer == "KAYA":
+                    print("\nTebrikler! Bulmacayı doğru çözdünüz!")
+                    print(f"{current_village.name} köyü başarıyla kurtarıldı!")
+                    
+                    # Köydeki öğeleri çantaya ekle
+                    print("\nKöyden alınan öğeler:")
+                    for item in current_village.inventory.items:
+                        while True:
+                            if not self.inventory.push(item):
+                                print("\nÇanta dolu! Bir öğe çıkarmalısınız.")
+                                print("\nÇantanızdaki öğeler:")
+                                current = self.inventory.head
+                                i = 1
+                                while current:
+                                    print(f"{i}. {current.item.name} (Güç: {current.item.power})")
+                                    current = current.next
+                                    i += 1
+                                item_to_remove = input("\nÇıkarmak istediğiniz öğenin adını girin: ")
+                                if self.inventory.pop(item_to_remove):
+                                    if self.inventory.push(item):
+                                        print(f"{item_to_remove} çantadan çıkarıldı ve {item.name} eklendi.")
+                                        break
+                                    else:
+                                        print("Çanta hala dolu! Başka bir öğe çıkarmalısınız.")
+                                else:
+                                    print("Öğe bulunamadı! Lütfen listedeki öğelerden birini seçin.")
+                                    continue
+                            else:
+                                print(f"- {item.name} (Güç: {item.power})")
+                                break
+                    
+                    current_village.is_liberated = True
+                    self.remove_current_village()  # Kuyruktan çıkar
+                    return
+                else:
+                    print("Yanlış cevap! Tekrar deneyin.")
+                    print("\nİpucu: Kristalköy'deki envanterler: Altın, Zırh, Ok-Yay")
+                    print("İpucu: Zümrütvadi'deki envanterler: Yiyecek, Anahtar, Kılıç")
+
+        # 7. köy için çanta yönetimi sistemi (6 köy kurtarıldıktan sonra)
+        elif liberated_villages == 6:  # 7. köy
+            print("\nKöyde dar bir geçit var. Bu geçidi geçmek için çantanızda en fazla 7 ürün olmalı.")
+            items_to_remove = self.inventory.size - 7
+            if items_to_remove > 0:
+                print(f"{items_to_remove} ürün çıkarmanız gerekiyor.")
+            
+            while self.inventory.size > 7:
+                print("\nÇantanızdaki öğeler:")
+                current = self.inventory.head
+                i = 1
+                while current:
+                    print(f"{i}. {current.item.name} (Güç: {current.item.power})")
+                    current = current.next
+                    i += 1
+                
+                try:
+                    item_numbers = input("\nÇıkarmak istediğiniz ürünlerin numaralarını boşlukla ayırarak girin (1-10): ")
+                    numbers = [int(num) for num in item_numbers.split()]
+                    
+                    # Geçerli numara kontrolü
+                    if not all(1 <= num <= self.inventory.size for num in numbers):
+                        print("Geçersiz numara! Lütfen listedeki numaralardan seçin.")
+                        continue
+                    
+                    # Tekrarlanan numara kontrolü
+                    if len(numbers) != len(set(numbers)):
+                        print("Aynı numarayı birden fazla kez seçemezsiniz!")
+                        continue
+                    
+                    # Seçilen ürünleri çıkar
+                    current = self.inventory.head
+                    i = 1
+                    items_to_remove = []
+                    while current:
+                        if i in numbers:
+                            items_to_remove.append(current.item.name)
+                        current = current.next
+                        i += 1
+                    
+                    for item_name in items_to_remove:
+                        if self.inventory.pop(item_name):
+                            print(f"{item_name} çantadan çıkarıldı.")
+                    
+                except ValueError:
+                    print("Lütfen geçerli numaralar girin!")
+                    continue
+            
+            print(f"\nÇantanızda {self.inventory.size} ürün kaldı.")
+            print(f"{current_village.name} köyü başarıyla kurtarıldı!")
+            
+            # Köydeki öğeleri çantaya ekle
+            print("\nKöyden alınan öğeler:")
+            for item in current_village.inventory.items:
+                while True:
+                    if not self.inventory.push(item):
+                        print("\nÇanta dolu! Bir öğe çıkarmalısınız.")
+                        print("\nÇantanızdaki öğeler:")
+                        current = self.inventory.head
+                        i = 1
+                        while current:
+                            print(f"{i}. {current.item.name} (Güç: {current.item.power})")
+                            current = current.next
+                            i += 1
+                        item_to_remove = input("\nÇıkarmak istediğiniz öğenin adını girin: ")
+                        if self.inventory.pop(item_to_remove):
+                            if self.inventory.push(item):
+                                print(f"{item_to_remove} çantadan çıkarıldı ve {item.name} eklendi.")
+                                break
+                            else:
+                                print("Çanta hala dolu! Başka bir öğe çıkarmalısınız.")
+                        else:
+                            print("Öğe bulunamadı! Lütfen listedeki öğelerden birini seçin.")
+                            continue
+                    else:
+                        print(f"- {item.name} (Güç: {item.power})")
+                        break
+            
+            current_village.is_liberated = True
+            self.remove_current_village()  # Kuyruktan çıkar
+            return
+
+        # Normal köyler için
+        # Köydeki öğeleri çantaya ekle
+        for item in current_village.inventory.items:
+            while True:
+                if not self.inventory.push(item):
+                    print("\nÇanta dolu! Bir öğe çıkarmalısınız.")
+                    print("\nÇantanızdaki öğeler:")
+                    current = self.inventory.head
+                    i = 1
+                    while current:
+                        print(f"{i}. {current.item.name} (Güç: {current.item.power})")
+                        current = current.next
+                        i += 1
+                    item_to_remove = input("\nÇıkarmak istediğiniz öğenin adını girin: ")
+                    if self.inventory.pop(item_to_remove):
+                        if self.inventory.push(item):
+                            print(f"{item_to_remove} çantadan çıkarıldı ve {item.name} eklendi.")
+                            break
+                        else:
+                            print("Çanta hala dolu! Başka bir öğe çıkarmalısınız.")
+                    else:
+                        print("Öğe bulunamadı! Lütfen listedeki öğelerden birini seçin.")
+                    continue
+                else:
+                    print(f"- {item.name} (Güç: {item.power})")
+                    break
+
+        current_village.is_liberated = True
+        self.remove_current_village()  # Kuyruktan çıkar
+        print(f"{current_village.name} köyü başarıyla kurtarıldı!")
+        print("\nKöyden alınan öğeler:")
+        for item in current_village.inventory.items:
+            print(f"- {item.name} (Güç: {item.power})")
+
+    def _count_villages(self):
+        """Kuyruktaki köy sayısını döndürür"""
+        return self.liberation_queue.size
+
+    def show_progress(self):
+        print("\n=== İlerleme Durumu ===")
         
-        self.villages = deque()  # Kuyruğu temizle
-        for i, name in enumerate(village_names):
-            village = Village(name, village_items[i])
-            # Her köye 3 öğe ekle
-            for item in village_items[i]:
-                village.add_item(item)
-            self.villages.append(village)
+        # Tüm köylerin listesi
+        all_villages = ["Yeşilvadi", "Gümüşköy", "Altınşehir", "Demirtepe", 
+                       "Kristalköy", "Zümrütvadi", "Elmasşehir"]
+        
+        # Şu anki köyü göster
+        current_village = self.get_current_village()
+        if current_village:
+            print(f"Şu anki köy: {current_village.name}")
+        else:
+            print("Tüm köyler kurtarıldı!")
+            
+        print("\nKurtarılan köyler:")
+        liberated_count = 0
+        for village_name in all_villages:
+            # Köy bağlı listede kurtarılmış olarak işaretlenmişse
+            found = False
+            current = self.villages
+            while current:
+                if current.village.name == village_name and current.village.is_liberated:
+                    found = True
+                    break
+                current = current.next
+            if found:
+                print(f"- {village_name}")
+                liberated_count += 1
+                
+        print("\nKurtarılacak köyler:")
+        remaining_count = 0
+        current = self.villages
+        while current:
+            if not current.village.is_liberated:
+                print(f"- {current.village.name}")
+                remaining_count += 1
+            current = current.next
+                
+        print(f"\nToplam ilerleme: {liberated_count}/7 köy kurtarıldı.")
 
     def show_menu(self):
         while True:
@@ -414,230 +799,8 @@ class Game:
                 print("Geçersiz seçim!")
                 input("\nDevam etmek için Enter'a basın...")
 
-    def list_villages(self):
-        print("\n=== Köyler ===")
-        for i, village in enumerate(self.villages, 1):
-            status = "Kurtarıldı" if village.is_liberated else "Kurtarılmadı"
-            items_str = ", ".join([item.name for item in village.inventory.items])
-            print(f"{i}. {village.name} - {status}")
-            print(f"   Öğeler: {items_str}")
-            print()  # Boş satır ekle
-
     def show_inventory(self):
         self.inventory.show_inventory()
-
-    def liberate_village(self):
-        if not self.villages:
-            print("Tüm köyler kurtarıldı!")
-            return
-
-        current_village = self.villages[0]  # Kuyruğun başındaki köy
-        print(f"\n{current_village.name} köyünü kurtarmaya çalışıyorsunuz...")
-        
-        # 5. köy için özel güç puanı sistemi
-        if len(self.villages) == 3:  # 5. köy
-            required_power = 7
-            total_power = 0
-            
-            while total_power < required_power:
-                print(f"\nKristalköy köyünü kurtarmak için içerdeki casusuna en az {required_power} güç puanı vermen gerekiyor.")
-                print(f"Şu ana kadar verilen güç puanı: {total_power}")
-                print(f"Kalan güç puanı: {required_power - total_power}")
-                
-                print("\nÇantanızdaki öğeler:")
-                for i, item in enumerate(self.inventory.items, 1):
-                    print(f"{i}. {item.name} (Güç: {item.power})")
-                
-                item_name = input("\nKullanmak istediğiniz öğenin adını girin: ")
-                found_item = next((item for item in self.inventory.items if item.name.lower() == item_name.lower()), None)
-                
-                if found_item:
-                    total_power += found_item.power
-                    self.inventory.use_item(found_item.name)
-                    print(f"{found_item.name} kullanıldı. Güç puanı: {found_item.power}")
-                else:
-                    print("Öğe bulunamadı! Lütfen listedeki öğelerden birini seçin.")
-                    continue
-            
-            print(f"\nToplam {total_power} güç puanı toplandı!")
-            print(f"{current_village.name} köyü başarıyla kurtarıldı!")
-            
-            # Köydeki öğeleri çantaya ekle
-            print("\nKöyden alınan öğeler:")
-            for item in current_village.inventory.items:
-                while True:
-                    if not self.inventory.push(item):
-                        print("\nÇanta dolu! Bir öğe çıkarmalısınız.")
-                        print("\nÇantanızdaki öğeler:")
-                        for i, inv_item in enumerate(self.inventory.items, 1):
-                            print(f"{i}. {inv_item}")
-                        item_to_remove = input("\nÇıkarmak istediğiniz öğenin adını girin: ")
-                        found_item = next((item for item in self.inventory.items if item.name.lower() == item_to_remove.lower()), None)
-                        if found_item:
-                            self.inventory.use_item(found_item.name)
-                            if self.inventory.push(item):
-                                print(f"{found_item.name} çantadan çıkarıldı ve {item.name} eklendi.")
-                                break
-                            else:
-                                print("Çanta hala dolu! Başka bir öğe çıkarmalısınız.")
-                        else:
-                            print("Öğe bulunamadı! Lütfen listedeki öğelerden birini seçin.")
-                            continue
-                    else:
-                        print(f"- {item.name} (Güç: {item.power})")
-                        break
-            
-            current_village.is_liberated = True
-            self.villages.popleft()  # Kuyruktan çıkar
-            return
-
-        # 6. köy için bulmaca sistemi
-        elif len(self.villages) == 2:  # 6. köy
-            print("\nKöy girişindeki kapıyı açmak için bir bulmaca var!")
-            print("\nBULMACA:")
-            print("Kristalköy ve Zümrütvadi köylerindeki envanterlerin baş harflerinden oluşan 4 harfli bir kelime bulun.")
-            print("Bu kelimenin harfleri Kristalköy ve Zümrütvadi'de gizli.")
-            print("\nİpucu: Kristalköy'deki envanterler: Altın, Zırh, Ok-Yay")
-            print("İpucu: Zümrütvadi'deki envanterler: Yiyecek, Anahtar, Kılıç")
-            
-            while True:
-                answer = input("\nBulmacanın cevabını girin (büyük harflerle): ").upper()
-                if answer == "KAYA":
-                    print("\nTebrikler! Bulmacayı doğru çözdünüz!")
-                    print(f"{current_village.name} köyü başarıyla kurtarıldı!")
-                    
-                    # Köydeki öğeleri çantaya ekle
-                    print("\nKöyden alınan öğeler:")
-                    for item in current_village.inventory.items:
-                        while True:
-                            if not self.inventory.push(item):
-                                print("\nÇanta dolu! Bir öğe çıkarmalısınız.")
-                                print("\nÇantanızdaki öğeler:")
-                                for i, inv_item in enumerate(self.inventory.items, 1):
-                                    print(f"{i}. {inv_item}")
-                                item_to_remove = input("\nÇıkarmak istediğiniz öğenin adını girin: ")
-                                found_item = next((item for item in self.inventory.items if item.name.lower() == item_to_remove.lower()), None)
-                                if found_item:
-                                    self.inventory.use_item(found_item.name)
-                                    if self.inventory.push(item):
-                                        print(f"{found_item.name} çantadan çıkarıldı ve {item.name} eklendi.")
-                                        break
-                                    else:
-                                        print("Çanta hala dolu! Başka bir öğe çıkarmalısınız.")
-                                else:
-                                    print("Öğe bulunamadı! Lütfen listedeki öğelerden birini seçin.")
-                                continue
-                            else:
-                                print(f"- {item.name} (Güç: {item.power})")
-                                break
-                    
-                    current_village.is_liberated = True
-                    self.villages.popleft()  # Kuyruktan çıkar
-                    return
-                else:
-                    print("Yanlış cevap! Tekrar deneyin.")
-                    print("\nİpucu: Kristalköy'deki envanterler: Altın, Zırh, Ok-Yay")
-                    print("İpucu: Zümrütvadi'deki envanterler: Yiyecek, Anahtar, Kılıç")
-
-        # 7. köy için çanta yönetimi sistemi
-        elif len(self.villages) == 1:  # 7. köy
-            print("\nKöyde dar bir geçit var. Bu geçidi geçmek için çantanızda en fazla 7 ürün olmalı.")
-            items_to_remove = len(self.inventory.items) - 7
-            if items_to_remove > 0:
-                print(f"{items_to_remove} ürün çıkarmanız gerekiyor.")
-            
-            while len(self.inventory.items) > 7:
-                print("\nÇantanızdaki öğeler:")
-                for i, item in enumerate(self.inventory.items, 1):
-                    print(f"{i}. {item.name} (Güç: {item.power})")
-                
-                try:
-                    item_numbers = input("\nÇıkarmak istediğiniz ürünlerin numaralarını boşlukla ayırarak girin (1-10): ")
-                    numbers = [int(num) for num in item_numbers.split()]
-                    
-                    # Geçerli numara kontrolü
-                    if not all(1 <= num <= len(self.inventory.items) for num in numbers):
-                        print("Geçersiz numara! Lütfen listedeki numaralardan seçin.")
-                        continue
-                    
-                    # Tekrarlanan numara kontrolü
-                    if len(numbers) != len(set(numbers)):
-                        print("Aynı numarayı birden fazla kez seçemezsiniz!")
-                        continue
-                    
-                    # Seçilen ürünleri çıkar
-                    for num in sorted(numbers, reverse=True):
-                        item = self.inventory.items[num-1]
-                        self.inventory.use_item(item.name)
-                        print(f"{item.name} çantadan çıkarıldı.")
-                    
-                except ValueError:
-                    print("Lütfen geçerli numaralar girin!")
-                    continue
-            
-            print(f"\nÇantanızda {len(self.inventory.items)} ürün kaldı.")
-            print(f"{current_village.name} köyü başarıyla kurtarıldı!")
-            
-            # Köydeki öğeleri çantaya ekle
-            print("\nKöyden alınan öğeler:")
-            for item in current_village.inventory.items:
-                while True:
-                    if not self.inventory.push(item):
-                        print("\nÇanta dolu! Bir öğe çıkarmalısınız.")
-                        print("\nÇantanızdaki öğeler:")
-                        for i, inv_item in enumerate(self.inventory.items, 1):
-                            print(f"{i}. {inv_item}")
-                        item_to_remove = input("\nÇıkarmak istediğiniz öğenin adını girin: ")
-                        found_item = next((item for item in self.inventory.items if item.name.lower() == item_to_remove.lower()), None)
-                        if found_item:
-                            self.inventory.use_item(found_item.name)
-                            if self.inventory.push(item):
-                                print(f"{found_item.name} çantadan çıkarıldı ve {item.name} eklendi.")
-                                break
-                            else:
-                                print("Çanta hala dolu! Başka bir öğe çıkarmalısınız.")
-                        else:
-                            print("Öğe bulunamadı! Lütfen listedeki öğelerden birini seçin.")
-                            continue
-                    else:
-                        print(f"- {item.name} (Güç: {item.power})")
-                        break
-            
-            current_village.is_liberated = True
-            self.villages.popleft()  # Kuyruktan çıkar
-            return
-
-        # Normal köyler için
-        # Köydeki öğeleri çantaya ekle
-        for item in current_village.inventory.items:
-            while True:
-                if not self.inventory.push(item):
-                    print("\nÇanta dolu! Bir öğe çıkarmalısınız.")
-                    print("\nÇantanızdaki öğeler:")
-                    for i, inv_item in enumerate(self.inventory.items, 1):
-                        print(f"{i}. {inv_item}")
-                    item_to_remove = input("\nÇıkarmak istediğiniz öğenin adını girin: ")
-                    found_item = next((item for item in self.inventory.items if item.name.lower() == item_to_remove.lower()), None)
-                    if found_item:
-                        self.inventory.use_item(found_item.name)
-                        if self.inventory.push(item):
-                            print(f"{found_item.name} çantadan çıkarıldı ve {item.name} eklendi.")
-                            break
-                        else:
-                            print("Çanta hala dolu! Başka bir öğe çıkarmalısınız.")
-                    else:
-                        print("Öğe bulunamadı! Lütfen listedeki öğelerden birini seçin.")
-                    continue
-                else:
-                    print(f"- {item.name} (Güç: {item.power})")
-                    break
-
-        current_village.is_liberated = True
-        self.villages.popleft()  # Kuyruktan çıkar
-        print(f"{current_village.name} köyü başarıyla kurtarıldı!")
-        print("\nKöyden alınan öğeler:")
-        for item in current_village.inventory.items:
-            print(f"- {item.name} (Güç: {item.power})")
 
     def use_item(self):
         print("\n1. Öğe Kullan")
@@ -645,36 +808,40 @@ class Game:
         choice = input("\nSeçiminiz (1-2): ")
         
         if choice == "1":
-            if not self.inventory.items:
+            if not self.inventory.head:
                 print("\nÇanta boş!")
                 return
                 
             print("\nÇantanızdaki öğeler:")
-            for i, item in enumerate(self.inventory.items, 1):
-                print(f"{i}. {item.name} (Güç: {item.power})")
+            current = self.inventory.head
+            i = 1
+            while current:
+                print(f"{i}. {current.item.name} (Güç: {current.item.power})")
+                current = current.next
+                i += 1
                 
             item_name = input("\nKullanmak istediğiniz öğenin adını girin: ")
-            found_item = next((item for item in self.inventory.items if item.name.lower() == item_name.lower()), None)
-            if found_item:
-                self.inventory.use_item(found_item.name)
-                print(f"{found_item.name} başarıyla kullanıldı!")
+            if self.inventory.pop(item_name):
+                print(f"{item_name} başarıyla kullanıldı!")
             else:
                 print("Öğe bulunamadı!")
                 
         elif choice == "2":
-            if not self.inventory.items:
+            if not self.inventory.head:
                 print("\nÇanta boş!")
                 return
                 
             print("\nÇantanızdaki öğeler:")
-            for i, item in enumerate(self.inventory.items, 1):
-                print(f"{i}. {item.name} (Güç: {item.power})")
+            current = self.inventory.head
+            i = 1
+            while current:
+                print(f"{i}. {current.item.name} (Güç: {current.item.power})")
+                current = current.next
+                i += 1
                 
             item_name = input("\nÇıkarmak istediğiniz öğenin adını girin: ")
-            found_item = next((item for item in self.inventory.items if item.name.lower() == item_name.lower()), None)
-            if found_item:
-                self.inventory.use_item(found_item.name)
-                print(f"{found_item.name} başarıyla çantadan çıkarıldı!")
+            if self.inventory.pop(item_name):
+                print(f"{item_name} başarıyla çantadan çıkarıldı!")
             else:
                 print("Öğe bulunamadı!")
         else:
@@ -688,21 +855,23 @@ class Game:
         item_name = input("Aranacak öğenin adını girin: ")
         
         if choice == "1":
-            found = any(item.name.lower() == item_name.lower() for item in self.inventory.items)
-            if found:
-                found_item = next(item for item in self.inventory.items if item.name.lower() == item_name.lower())
+            # BST'de ara
+            found_item = self.inventory.search_item(item_name)
+            if found_item:
                 print(f"{found_item.name} çantada bulundu!")
             else:
                 print("Öğe çantada bulunamadı!")
         elif choice == "2":
             found_in_villages = []
-            for village in self.villages:
-                if any(item.name.lower() == item_name.lower() for item in village.inventory.items):
-                    found_in_villages.append(village.name)
+            current = self.villages
+            while current:
+                # Her köyün BST'sinde ara
+                if current.village.inventory.search(item_name):
+                    found_in_villages.append(current.village.name)
+                current = current.next
             
             if found_in_villages:
-                found_item = next(item for village in self.villages for item in village.inventory.items if item.name.lower() == item_name.lower())
-                print(f"\n{found_item.name} şu köylerde bulundu:")
+                print(f"\n{item_name} şu köylerde bulundu:")
                 for village_name in found_in_villages:
                     print(f"- {village_name}")
             else:
@@ -710,35 +879,58 @@ class Game:
         else:
             print("Geçersiz seçim!")
 
-    def show_progress(self):
-        print("\n=== İlerleme Durumu ===")
+    def initialize_villages(self):
+        # Tüm öğeleri tanımla
+        all_items = {
+            "Kılıç": Item("Kılıç", 10),
+            "Büyü": Item("Büyü", 5),
+            "Harita": Item("Harita", 2),
+            "Balta": Item("Balta", 8),
+            "Altın": Item("Altın", 15),
+            "Yiyecek": Item("Yiyecek", 3),
+            "Bakır": Item("Bakır", 4),
+            "Gümüş": Item("Gümüş", 6),
+            "Kalkan": Item("Kalkan", 7),
+            "Zırh": Item("Zırh", 12),
+            "Anahtar": Item("Anahtar", 1),
+            "Meşale": Item("Meşale", 2),
+            "Ok-Yay": Item("Ok-Yay", 9)
+        }
         
-        # Tüm köylerin listesi
-        all_villages = ["Yeşilvadi", "Gümüşköy", "Altınşehir", "Demirtepe", 
-                       "Kristalköy", "Zümrütvadi", "Elmasşehir"]
+        # Her köy için özel öğe kombinasyonları
+        village_items = {
+            "Yeşilvadi": [all_items["Kılıç"], all_items["Yiyecek"], all_items["Kalkan"]],
+            "Gümüşköy": [all_items["Büyü"], all_items["Bakır"], all_items["Zırh"]],
+            "Altınşehir": [all_items["Harita"], all_items["Gümüş"], all_items["Anahtar"]],
+            "Demirtepe": [all_items["Balta"], all_items["Kalkan"], all_items["Meşale"]],
+            "Kristalköy": [all_items["Altın"], all_items["Zırh"], all_items["Ok-Yay"]],
+            "Zümrütvadi": [all_items["Yiyecek"], all_items["Anahtar"], all_items["Kılıç"]],
+            "Elmasşehir": [all_items["Bakır"], all_items["Meşale"], all_items["Büyü"]]
+        }
         
-        # Şu anki köyü göster
-        if self.villages:
-            print(f"Şu anki köy: {self.villages[0].name}")
-        else:
-            print("Tüm köyler kurtarıldı!")
-            
-        print("\nKurtarılan köyler:")
-        liberated_count = 0
-        for village_name in all_villages:
-            # Köy kuyrukta değilse kurtarılmış demektir
-            if not any(v.name == village_name for v in self.villages):
-                print(f"- {village_name}")
-                liberated_count += 1
-                
-        print("\nKurtarılacak köyler:")
-        remaining_count = 0
-        for village in self.villages:
-            if not village.is_liberated:
-                print(f"- {village.name}")
-                remaining_count += 1
-                
-        print(f"\nToplam ilerleme: {liberated_count}/7 köy kurtarıldı.")
+        # Köyleri yeniden oluştur
+        current = self.villages
+        while current:
+            village_name = current.village.name
+            # Köyün envanterini temizle
+            current.village.inventory = AVLTree()
+            # Köye öğeleri ekle
+            for item in village_items[village_name]:
+                current.village.add_item(item)
+            current = current.next
+
+    def list_villages(self):
+        print("\n=== Köyler ===")
+        current = self.villages
+        i = 1
+        while current:
+            status = "Kurtarıldı" if current.village.is_liberated else "Kurtarılmadı"
+            items_str = ", ".join([item.name for item in current.village.inventory.items])
+            print(f"{i}. {current.village.name} - {status}")
+            print(f"   Öğeler: {items_str}")
+            print()
+            current = current.next
+            i += 1
 
 if __name__ == "__main__":
     game = Game()
