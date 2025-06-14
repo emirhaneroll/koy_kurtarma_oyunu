@@ -50,27 +50,6 @@ Bu proje, veri yapıları dersi kapsamında geliştirilmiş bir metin tabanlı o
    - İlerleme Durumu
    - Çıkış
 
-## Gereksinimler
-
-- Python 3.x
-
-## Kurulum
-
-1. Projeyi klonlayın:
-```bash
-git clone [repository-url]
-```
-
-2. Proje dizinine gidin:
-```bash
-cd [proje-dizini]
-```
-
-3. Oyunu başlatın:
-```bash
-python main.py
-```
-
 ## Oyun Özellikleri
 
 - Köyleri listeleme ve kurtarma
